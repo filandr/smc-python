@@ -1,9 +1,11 @@
+#from smc import session
+#from smc.core.engine_vss import VSSContainer
+
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
     import xml.etree.ElementTree as ET
 
-# GW, IP network SMC API
 
 xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <Environment
@@ -44,17 +46,13 @@ xml = '''<?xml version="1.0" encoding="UTF-8"?>
 </Environment>
 '''
 
-def parse_ovf(ovf):
-    ovf = xml
-    #try:
-    #    with open(filename,'r') as f:
-    #        ovf = f.read()
-    #except IOError:
-    #    print("ERROR, %s not found" % filename)
-            
+def parse_ovf(ovf_filename):
+    with open(ovf_filename,'r') as f:
+        contents = f.read()
+
     namespace = {'oe': '{http://schemas.dmtf.org/ovf/environment/1}'}
 
-    root = ET.fromstring(ovf)
+    root = ET.fromstring(contents)
     for child in root.iter():
         if child.tag.endswith('PropertySection'):
             return [
@@ -64,23 +62,25 @@ def parse_ovf(ovf):
                     if section.attrib
             ]
 
+
+def create_vss():
+    pass
+
+
 if __name__ == '__main__':
-    import os
-    import subprocess
     import sys
-    
+    import subprocess
+
     FILENAME = '/spool/cpa/ovf-env.xml'
     SCRIPT_DIR = '/spool/cpa/bin/ngfw-appliance-scripts'
     SET_NETWORK_SCRIPT = 'set-ngfw-network-info'
-    
+
     if len(sys.argv) > 1:
         FILENAME = sys.argv[1]
-    
-    try:
-        config = parse_ovf(FILENAME)
-    except IOError as e:
-        print(e)
-        
+
+    # Raises IOError
+    config = parse_ovf(FILENAME)
+
     from pprint import pprint
     pprint(config)
 
@@ -88,13 +88,13 @@ if __name__ == '__main__':
             for setting in config
             for key, value in setting.items()
             if key.startswith('management.')}
-    
-    
-    return_code = subprocess.call("echo Hello World", shell=True)
+
     #set-ngfw-network-info node-ip node-netmask default-gateway
-    os.system('{}/{} {} {} {}'.format(
-        SCRIPT_DIR, SET_NETWORK_SCRIPT)) 
-    
-    
-    
-    
+    ret = subprocess.call('{}/{} {} {} {}'.format(
+        SCRIPT_DIR,
+        SET_NETWORK_SCRIPT,
+        mgmt.get('management.ip0'),
+        mgmt.get('management.netmask0'),
+        mgmt.get('management.gateway')), shell=True)
+
+    print('Return from subprocess call to set network info: %s' % ret)
