@@ -47,10 +47,10 @@ class FileFilteringPolicy(Policy):
         File filtering rules for this policy.
 
         :return: collection of :class:`.FileFilteringRule`
-        :rtype: SubElementCollection
+        :rtype: create_collection
         """
         return create_collection(
-            self._resource.file_filtering_rules,
+            self.data.get_link('file_filtering_rules'),
             FileFilteringRule)
 
     def export(self): pass  # Not valid on file filtering policy

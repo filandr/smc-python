@@ -1,7 +1,7 @@
 """
 Module representing network elements used within the SMC
 """
-from smc.base.model import Element, ElementCreator, prepared_request
+from smc.base.model import Element, ElementCreator, SimpleElement
 from smc.api.exceptions import MissingRequiredInput, CreateElementFailed,\
     ElementNotFound
 from smc.api.common import fetch_json_by_href
@@ -383,14 +383,14 @@ class IPList(Element):
 
     Example of downloading the IPList in text format::
 
-        >>> iplist = list(Search('ip_list').objects.filter('mylist'))
+        >>> iplist = list(IPList.objects.filter('mylist'))
         >>> print(iplist)
         [IPList(name=mylist)]
         >>> iplist[0].download(filename='iplist.txt', as_type='txt')
 
     Example of uploading an IPList as a zip file::
 
-        >>> iplist = list(Search('ip_list').objects.filter('mylist'))
+        >>> iplist = list(IPList.objects.filter('mylist'))
         >>> print(iplist)
         [IPList(name=mylist)]
         iplist[0].upload(filename='/path/to/iplist.zip')
@@ -424,11 +424,10 @@ class IPList(Element):
             elif as_type == 'json':
                 headers = {'accept': 'application/json'}
 
-            prepared_request(
-                href=self._resource.ip_address_list,
+            self.read_cmd(
+                resource='ip_address_list',
                 filename=filename,
-                headers=headers
-            ).read()
+                headers=headers)
 
     def upload(self, filename=None, json=None, as_type='zip'):
         """
@@ -457,12 +456,11 @@ class IPList(Element):
         elif as_type == 'txt':
             params = {'format': 'txt'}
 
-        prepared_request(
+        self.send_cmd(
             CreateElementFailed,
-            href=self._resource.ip_address_list,
+            resource='ip_address_list',
             headers=headers, files=files, json=json,
-            params=params
-        ).create()
+            params=params)
 
     @classmethod
     def create(cls, name, iplist=None, comment=None):
@@ -484,11 +482,11 @@ class IPList(Element):
         if result and iplist is not None:
             element = IPList(name)
 
-            prepared_request(
+            element.send_cmd(
                 CreateElementFailed,
-                href=element._resource.ip_address_list,
-                json={'ip': iplist}
-            ).create()
+                resource='ip_address_list',
+                json={'ip': iplist})
+    
         return result
 
 
@@ -553,7 +551,7 @@ class Alias(Element):
     or loading directly if you know the alias name:
     ::
 
-        >>> list(Search('alias').objects.all())
+        >>> list(Search.objects.entry_point('alias'))
         [Alias(name=$$ Interface ID 46.net), Alias(name=$$ Interface ID 45.net), etc]
 
         >>> from smc.elements.network import Alias
@@ -572,7 +570,7 @@ class Alias(Element):
         href = data.get('alias_ref')
         result = fetch_json_by_href(href)
         alias = Alias(result.json.get('name'), href=href)
-        alias._add_cache(result.json, result.etag)
+        alias.data = SimpleElement(etag=result.etag, **result.json)
         alias.resolved_value = data.get('resolved_value')
         return alias
 
@@ -592,11 +590,10 @@ class Alias(Element):
         :rtype: list
         """
         if not self.resolved_value:
-            result = prepared_request(
+            result = self.read_cmd(
                 ElementNotFound,
-                href=self._resource.resolve,
-                params={'for': engine}
-            ).read()
+                href=self.data.get_link('resolve'),
+                params={'for': engine})
 
-            self.resolved_value = result.json.get('resolved_value')
+            self.resolved_value = result.get('resolved_value')
         return self.resolved_value

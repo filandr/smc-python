@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 class _EntryPoint(object):
     def __init__(self, _listof):
         self.entries = _listof
-        
+
     def __iter__(self):
         for entry in self.entries:
             yield EntryPoint(
                 href=entry.get('href'),
                 rel=entry.get('rel'))
-    
+
     def __len__(self):
         return len(self.entries)
 
@@ -44,14 +44,15 @@ class _EntryPoint(object):
         """
         return [entry_rel.rel for entry_rel in iter(self)]
 
-    
+
 EntryPoint = collections.namedtuple('EntryPoint', 'href rel')
-    
+
 
 class Session(object):
-    
+
     AUTOCOMMIT = False
-    
+    _MODS_LOADED = False
+
     def __init__(self):
         self._entry_points = []
         self._api_version = None
@@ -61,6 +62,7 @@ class Session(object):
         self._api_key = None
         self._timeout = 10
         self._domain = 'Shared Domain'
+        self._extra_args = {}
 
     @property
     def entry_points(self):
@@ -69,7 +71,7 @@ class Session(object):
                 "No entry points found, it is likely there is no valid "
                 "login session.")
         return self._entry_points
-    
+
     @property
     def api_version(self):
         """ API Version """
@@ -82,8 +84,11 @@ class Session(object):
 
     @property
     def session_id(self):
-        """ Session ID representation """
-        return self.session.cookies
+        """ The session ID in header type format. Can be inserted
+        into a connection if necessary using
+        {'Cookie': session.session_id}
+        """
+        return 'JSESSIONID=%s' % self.session.cookies.get('JSESSIONID')
 
     @property
     def connection(self):
@@ -93,17 +98,22 @@ class Session(object):
     def url(self):
         """ SMC URL """
         return self._url
-
+    
+    @property
+    def web_socket_url(self):
+        return 'ws://{}/{}'.format(
+            self.url.split('://')[-1], self.api_version)
+    
     @property
     def api_key(self):
         """ SMC Client API key """
         return self._api_key
-    
+
     @property
     def timeout(self):
         """ Session timeout """
         return self._timeout
-    
+
     @property
     def domain(self):
         """ Logged in domain """
@@ -154,7 +164,7 @@ class Session(object):
             except ConfigLoadError:
                 # Last ditch effort, try to load from environment
                 cfg = load_from_environ()
-            
+
             logger.debug('Read config data: %s', cfg)
             url = cfg.get('url')
             api_key = cfg.get('api_key')
@@ -162,50 +172,59 @@ class Session(object):
             verify = cfg.get('verify')
             timeout = cfg.get('timeout')
             domain = cfg.get('domain')
-        
+
         self._url = url
         self._api_key = api_key
 
         if timeout:
             self._timeout = timeout
-            
+
         if domain:
             self._domain = domain
-        
+
         self._api_version = get_api_version(url, api_version, timeout, verify)
-        
-        base = get_api_base(url, self.api_version)
-        
+
+        base = get_api_base(url, self.api_version, verify=verify)
+
         self._entry_points = get_entry_points(base, timeout, verify)
-        
+
         s = requests.session()  # no session yet
+
+        json={'authenticationkey': self.api_key,
+              'domain': domain}
+
+        if kwargs:
+            json.update(**kwargs)
+            self._extra_args.update(**kwargs)
 
         r = s.post(
             self.entry_points.get('login'),
-            json={'authenticationkey': self.api_key,
-                  'domain': domain},
+            json=json,
             headers={'content-type': 'application/json'},
             verify=verify)
 
-        logger.info("Using SMC API version: %s", self._api_version)
-        
+        logger.info('Using SMC API version: %s', self._api_version)
+
         if r.status_code == 200:
             self._session = s  # session creation was successful
             self._session.verify = verify  # make verify setting persistent
             logger.debug(
-                "Login succeeded and session retrieved: %s", self.session_id)
-    
+                'Login succeeded and session retrieved: %s', self.session_id)
+
             self._connection = smc.api.web.SMCAPIConnection(self)
         else:
             raise SMCConnectionError(
-                "Login failed, HTTP status code: %s and reason: %s" % (
+                'Login failed, HTTP status code: %s and reason: %s' % (
                     r.status_code, r.reason))
-    
-        logger.debug('Registering class mappings.')
-        # Load the modules to register needed classes
-        for pkg in ('smc.policy', 'smc.elements', 'smc.routing',
-                    'smc.vpn', 'smc.administration', 'smc.core'):
-            import_submodules(pkg, recursive=False)
+
+        if not self._MODS_LOADED:
+            logger.debug('Registering class mappings.')
+            # Load the modules to register needed classes
+            for pkg in ('smc.policy', 'smc.elements', 'smc.routing',
+                        'smc.vpn', 'smc.administration', 'smc.core'):
+                import_submodules(pkg, recursive=False)
+
+            self._MODS_LOADED = True
 
     def logout(self):
         """ Logout session from SMC """
@@ -213,19 +232,42 @@ class Session(object):
             try:
                 r = self.session.put(self.entry_points.get('logout'))
                 if r.status_code == 204:
-                    logger.info("Logged out successfully")
-                    logger.debug("Call counters: %s" % smc.api.web.counters)
+                    logger.info('Logged out successfully')
+                    logger.debug('Call counters: %s' % smc.api.web.counters)
                 else:
-                    logger.error("Logout status was unexpected. Received response "
-                                 "was status code: %s", (r.status_code))
+                    logger.error('Logout status was unexpected. Received response '
+                                 'was status code: %s', (r.status_code))
             except requests.exceptions.SSLError as e:
                 # When SSL is enabled and verification is disabled, logout may throw an
                 # SSL VERIFY FAILED error from requests module. Not sure why, will have
                 # to investigate
-                logger.error("SSL exception thrown during logout: %s", e)
+                logger.error('SSL exception thrown during logout: %s', e)
             finally:
                 self.session.cookies.clear()
                 self._entry_points = []
+
+    def refresh(self):
+        """
+        Refresh session on 401. Wrap this in a loop with retries.
+
+        :raises SMCConnectionError
+        """
+        # Did we already have a session that just timed out
+        if self.session and self.api_key and self.url:
+            # Try relogging in to refresh, otherwise fail
+            logger.info(
+                'Session timed out, will try obtaining a new session using '
+                'previously saved credential information.')
+            self.login(
+                url=self.url,
+                api_key=self.api_key,
+                api_version=self.api_version,
+                timeout=self.timeout,
+                verify=False,
+                domain=self.domain,
+                **self._extra_args)
+            return
+        raise SMCConnectionError('Session expired and attempted refresh failed.')
 
 
 def get_entry_points(base_url, timeout=10, verify=True):
@@ -235,51 +277,57 @@ def get_entry_points(base_url, timeout=10, verify=True):
     try:
         r = requests.get('%s/api' % (base_url), timeout=timeout,
                          verify=verify)
-    
+
         if r.status_code == 200:
             j = json.loads(r.text)
-            logger.debug("Successfully retrieved API entry points from SMC")
-            
+            logger.debug('Successfully retrieved API entry points from SMC')
+
             return _EntryPoint(j['entry_point'])
-    
+
         else:
-            raise SMCConnectionError("Error occurred during initial api "
-                                     "request, json was not returned. "
-                                     "Return data was: %s" % r.text)
+            raise SMCConnectionError(
+                'Invalid status received while getting entry points from SMC. '
+                'Status code received %s. Reason: %s' % (r.status_code, r.reason))
 
     except requests.exceptions.RequestException as e:
         raise SMCConnectionError(e)
-        
+
 
 def available_api_versions(base_url, timeout=10, verify=True):
     """
     Get all available API versions for this SMC
-    
+
     :return version numbers
     :rtype: list
     """
     try:
         r = requests.get('%s/api' % base_url, timeout=timeout,
                          verify=verify)  # no session required
-        j = json.loads(r.text)
-        versions = []
-        for version in j['version']:
-            versions.append(version['rel'])
-        versions = [float(i) for i in versions]
-        return versions
+        if r.status_code == 200:
+            j = json.loads(r.text)
+            versions = []
+            for version in j['version']:
+                versions.append(version['rel'])
+            versions = [float(i) for i in versions]
+            return versions
+        
+        raise SMCConnectionError(
+            'Invalid status received while getting entry points from SMC. '
+            'Status code received %s. Reason: %s' % (r.status_code, r.reason))
+
     except requests.exceptions.RequestException as e:
             raise SMCConnectionError(e)
 
-        
+
 def get_api_version(base_url, api_version=None, timeout=10, verify=True):
     """
     Get the API version specified or resolve the latest version
-    
+
     :return api version
     :rtype: float
     """
     versions = available_api_versions(base_url, timeout, verify)
-    
+
     if api_version is None:  # Use latest
         api_version = max(versions)
     else:
@@ -295,17 +343,17 @@ def get_api_version(base_url, api_version=None, timeout=10, verify=True):
     return api_version
 
 
-def get_api_base(base_url, api_version=None):
+def get_api_base(base_url, api_version=None, verify=True):
     """
     From the base url and optional api version, return the
     fully qualified API base URL
-    
+
     :rtype: str
     """
     return '{}/{}'.format(
-        base_url, 
-        str(get_api_version(base_url, api_version)))
-    
+        base_url,
+        str(get_api_version(base_url, api_version, verify=verify)))
+
 
 def import_submodules(package, recursive=True):
     """

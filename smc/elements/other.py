@@ -6,7 +6,7 @@ used by API functions or methods.
 For example, Blacklist can be applied to an engine directly or system wide. This class
 will define the format when calling blacklist functions.
 """
-from smc.base.model import Element, ElementCreator, prepared_request
+from smc.base.model import Element, ElementCreator
 from smc.api.exceptions import ModificationFailed
 from smc.base.util import element_resolver
 
@@ -57,9 +57,7 @@ class Category(Element):
         """
         return [Element.from_meta(**tag)
                 for tag in
-                prepared_request(
-                    href=self._resource.search_elements_from_category_tag
-                ).read().json]
+                self.read_cmd(resource='search_elements_from_category_tag')]
 
     def add_element(self, element):
         """
@@ -76,11 +74,10 @@ class Category(Element):
         """
         element = element_resolver(element)
 
-        prepared_request(
+        self.send_cmd(
             ModificationFailed,
-            href=self._resource.category_add_element,
-            json={'value': element}
-        ).create()
+            resource='category_add_element',
+            json={'value': element})
 
     def remove_element(self, element):
         """
@@ -99,11 +96,10 @@ class Category(Element):
         """
         element = element_resolver(element)
 
-        prepared_request(
+        self.send_cmd(
             ModificationFailed,
-            href=self._resource.category_remove_element,
-            json={'value': element}
-        ).create()
+            resource='category_remove_element',
+            json={'value': element})
 
     def add_category_tag(self, tags, append_lists=True):
         """
@@ -203,6 +199,7 @@ class CategoryTag(Element):
         return [Element.from_href(category)
                 for category in self.data.get('category_parent_ref')]
 
+
 class Location(Element):
     """
     Locations are used by elements to identify when they are behind a NAT
@@ -247,9 +244,7 @@ class Location(Element):
         """
         return [Element.from_meta(**element)
                 for element in
-                prepared_request(
-                    href=self._resource.search_nated_elements_from_location
-                ).read().json]
+                self.read_cmd(resource='search_nated_elements_from_location')]
 
 
 class LogicalInterface(Element):
@@ -358,65 +353,83 @@ class MacAddress(Element):
         return ElementCreator(cls, json)
 
 
-class ServerContactAddress(object):
-    def __init__(self, data):
-        self.data = data
-
-    @classmethod
-    def create(cls, address, location):
-        """
-        :param str address: ip address of contact address
-        :param str location: name of location
-        :raises CreateElementFailed: failed creating element with reason
-        :rtype: ServerContactAddress
-        """
-        from smc.elements.helpers import location_helper
-        location_ref = location_helper(location)
-        data = {'addresses': [address],
-                'location_ref': location_ref}
-        return ServerContactAddress(data)
-
-    @property
-    def addresses(self):
-        """                
-        Return list of addresses associated with this contact
-        address
-        
-        :return: list contact addresses
-        """
-        return self.data.get('addresses')
-
-    @property
-    def location_ref(self):
-        return self.data.get('location_ref')
-
-    @property
-    def location(self):
-        return Element.from_href(self.location_ref)
-
-    def __repr__(self):
-        return '{0}(addresses={1})'.format(
-            self.__class__.__name__, ','.join(self.addresses))
-
-
-def prepare_blacklist(src, dst, duration=3600):
+def prepare_blacklist(src, dst, duration=3600, src_port1=None,
+                      src_port2=None, src_proto='predefined_tcp',
+                      dst_port1=None, dst_port2=None,
+                      dst_proto='predefined_tcp'):
     """ 
-    Add a blacklist entry by source / destination
+    Create a blacklist entry.
+    
     A blacklist can be added directly from the engine node, or from
     the system context. If submitting from the system context, it becomes
     a global blacklist. This will return the properly formatted json
     to submit.
-
-    :param src: source address, with cidr, i.e. 10.10.10.10/32
-    :param dst: destination address with cidr
+    
+    :param src: source address, with cidr, i.e. 10.10.10.10/32 or 'any'
+    :param dst: destination address with cidr, i.e. 1.1.1.1/32 or 'any'
     :param int duration: length of time to blacklist
+    
+    Both the system and engine context blacklist allow kw to be passed
+    to provide additional functionality such as adding source and destination
+    ports or port ranges and specifying the protocol. The following parameters
+    define the ``kw`` that can be passed.
+    
+    The following example shows creating an engine context blacklist
+    using additional kw::
+    
+        engine.blacklist('1.1.1.1/32', '2.2.2.2/32', duration=3600,
+            src_port1=1000, src_port2=1500, src_proto='predefined_udp',
+            dst_port1=3, dst_port2=3000, dst_proto='predefined_udp')
+    
+    :param int src_port1: start source port to limit blacklist
+    :param int src_port2: end source port to limit blacklist
+    :param str src_proto: source protocol. Either 'predefined_tcp'
+        or 'predefined_udp'. (default: 'predefined_tcp')
+    :param int dst_port1: start dst port to limit blacklist
+    :param int dst_port2: end dst port to limit blacklist
+    :param str dst_proto: dst protocol. Either 'predefined_tcp'
+        or 'predefined_udp'. (default: 'predefined_tcp')
+    
+    .. note:: if blocking a range of ports, use both src_port1 and
+        src_port2, otherwise providing only src_port1 is adequate. The
+        same applies to dst_port1 / dst_port2. In addition, if you provide
+        src_portX but not dst_portX (or vice versa), the undefined port
+        side definition will default to all ports.
     """
 
     json = {}
-    end_point1 = {'name': '', 'address_mode': 'address',
-                  'ip_network': src}
-    end_point2 = {'name': '', 'address_mode': 'address',
-                  'ip_network': dst}
+    if 'any' in src.lower():
+        end_point1={
+            'address_mode': 'any'}
+    else:
+        end_point1={
+            'address_mode': 'address',
+            'ip_network': src}
+    
+    if src_port1:
+        if not src_port2:
+            src_port2 = src_port1
+        
+        end_point1.update(port1=src_port1,
+                          port2=src_port2,
+                          port_mode=src_proto)
+        
+    if 'any' in dst.lower():
+        end_point2={
+            'address_mode': 'any'}
+    else:
+        end_point2 = {
+            'address_mode': 'address',
+            'ip_network': dst}
+    
+    if dst_port1:
+        if not dst_port2:
+            dst_port2 = dst_port1
+        
+        end_point2.update(port1=dst_port1,
+                          port2=dst_port2,
+                          port_mode=dst_proto)
+    
     json.update(duration=duration)
     json.update(end_point1=end_point1)
     json.update(end_point2=end_point2)

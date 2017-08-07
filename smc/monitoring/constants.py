@@ -1,0 +1,150 @@
+"""
+Constants used within :py:mod:`smc.monitoring.values.Value` values to simplify
+referencing log viewer data.
+"""
+
+class LogField:
+    """
+    Log field constants can be referenced when creating filters such
+    as Field Values. i.e. FieldValue(LogField.SRC).
+    """
+    TIMESTAMP = 1 #: Timestamp for log event. To filter on timestamp, use LogQuery constructor.
+    NODEID = 4 #: Firewall or server node that passes this information: type(ip)
+    EVENT = 6 #: Logged event: type(long)
+    SRC = 7 #: Connection source IP address: type(ip)
+    DST = 8 #: Connection destination IP address: type(ip)
+    SPORT = 9 #: Connection source protocol port: type(long)
+    DPORT = 10 #: Connection destination protocol port: type(long)
+    PROTOCOL = 11 #: IP protocol: type(int)
+    SRCIF = 12 #: Source interface of firewall: type(long)
+    DSTIF = 13 #: Destination interface of firewall: type(long)
+    ACTION = 14 #: Connection action: type(long)
+    NATSRC = 15 #: Translated packet source IP address: type(ip)
+    NATDST = 16 #: Translated packet destination IP address: type(ip)
+    NATSPORT = 17 #: Translated packet source protocol port: type(int)
+    NATDPORT = 18 #: Translated packet destination port: type(int)
+    INFOMSG = 19 #: Information Message: type(string)
+    RULEID = 20 #: Rule tag value of acceptance rule: type(long)
+    NATRULEID = 21 #: The rule number of the rule that led to the log creation: type(long)
+    FACILITY = 22 #: Firewall subsystem: type(long)
+    TYPE = 23 #: Log event severity type: type(long)
+    ALERT = 25 #: Type of alert: type(long)
+    SERVICE = 27 #: Special field for filtering logs using the defined services. Not present in the log entries as such.: type(struct)
+    SENDERTYPE = 31 #: Sender type: type(int)
+    DATATYPE = 34 #: Data type: type(int)
+    INTERFACE = 35 #: Interface: type(long)
+    SITCATEGORY = 37 #: The type of the situation that caused sending this event.: type(int)
+    SENDERDOMAIN = 38 #: Administrative Domain of Event Sender: type(long)
+    TLSCERTIFICATEVERIFYERRORCODE = 39 #: TLS/SSL Certificate verify error code: type(long)
+    TLSDOMAIN = 40 #: Domain name field in SSL/TLS certificate: type(string)
+    TLSPROTOCOLVERSION = 41 #: TLS/SSL protocol version: type(long)
+    TLSCIPHERSUITE = 42 #: TLS/SSL cipher suite: type(long)
+    TLSCOMPRESSIONMETHOD = 43 #: TLS/SSL compression method: type(long)
+    TLSALERTLEVEL = 44 #: TLS/SSL Alert Message Alert Level: type(long)
+    TLSALERTDESCRIPTION = 45 #: TLS/SSL Alert Message Description: type(long)
+    SRCZONE = 46 #: Connection source interface zone: type(int)
+    DSTZONE = 47 #: Connection destination interface zone: type(int)
+    RETSRCIF = 49 #: Return source interface of the connection: type(long)
+    SNMPSRCIF = 50 #: SNMP index of source interface: type(int)
+    SNMPRETSRCIF = 51 #: SNMP index of return source interface: type(int)
+    APPLICATIONUSAGE = 52 #: The type of the application that caused sending this event.: type(int)
+    URLCATEGORYGROUP = 53 #: The type of the URL that caused sending this event.: type(int)
+    APPLICATIONCOMBINATIONFLAGS = 54 #: Anomaly information of certain combination of network application and client application.: type(long)
+    URLCATEGORYRISK = 55 #: The risk of the URL that caused sending this event.: type(int)
+    FILETYPECOMPAT = 56 #: The type of the file that caused sending this event.: type(int)
+    TUNNELINGLEVEL = 95 #: Number of tunneling protocol layers encapsulating this protocol layer: type(int)
+    ICMPTYPE = 100 #: ICMP type attribute: type(long)
+    ICMPCODE = 101 #: ICMP code attribute: type(long)
+    ICMPID = 102 #: ICMP identifier: type(long)
+    IPSECSSPI = 103 #: Inbound IPsec SPI value (hexadecimal): type(long)
+    ACCELAPSED = 104 #: Elapsed time of connection in seconds: type(long)
+    ACCTXBYTES = 105 #: Number of bytes sent during connection: type(long)
+    ACCRXBYTES = 106 #: Number of bytes received during connection: type(long)
+    AUTHRULEID = 107 #: The rule number of the rule that led to the log creation: type(long)
+    AUTHNAME = 108 #: User name of authorized user: type(string)
+    RTT = 109 #: Round trip time of connection establishing: type(long)
+    SRVHELPERID = 110 #: Protocol agent identification: type(int)
+    SYSLOGTYPE = 111 #: Syslog message type: type(int)
+    SRCVLAN = 112 #: Source VLAN: type(int)
+    DSTVLAN = 113 #: Destination VLAN: type(int)
+    STATE = 116 #: Connection state in connection monitoring: type(long)
+    BLACKLISTENTRYID = 117 #: None: type(long)
+    BLACKLISTENTRYSOURCEIP = 118 #: Blacklist entry source IP address: type(ip)
+    BLACKLISTENTRYSOURCEIPMASK = 119 #: Blacklist entry source IP address mask: type(ip)
+    BLACKLISTENTRYDESTINATIONIP = 120 #: Blacklist entry destination IP address: type(ip)
+    BLACKLISTENTRYDESTINATIONIPMASK = 121 #: Blacklist entry destination IP address mask: type(ip)
+    BLACKLISTENTRYPROTOCOL = 122 #: Blacklist entry IP protocol: type(int)
+    BLACKLISTENTRYSOURCEPORT = 123 #: Blacklist entry source port: type(int)
+    BLACKLISTENTRYSOURCEPORTRANGE = 124 #: Blacklist entry source port range end: type(int)
+    BLACKLISTENTRYDESTINATIONPORT = 125 #: Blacklist entry destination port: type(int)
+    BLACKLISTENTRYDESTINATIONPORTRANGE = 126 #: Blacklist entry destination port range end: type(int)
+    BLACKLISTENTRYDURATION = 127 #: Blacklist entry duration: type(int)
+    BLACKLISTER = 128 #: Blacklister: type(long)
+    QOSCLASS = 129 #: QoS Class: type(int)
+    DSCPMARK = 130 #: DSCP Mark: type(long)
+    QOSPRIORITY = 131 #: QoS Priority: type(int)
+    AUTHMETHOD = 133 #: Authentication Method element: type(int)
+    IPSAPPID = 134 #: Network application detected in the connection: type(int)
+    TLSMATCH = 135 #: TLS Match detected in the connection. Note that a single connection can have any number of distinct TLS Matches.: type(int)
+    TLSDETECTED = 136 #: The connection uses SSL/TLS protocol.: type(void)
+    TLSDECRYPTED = 137 #: The connection was decrypted and re-encrypted in the engine to perform deep inspection or application identification.: type(void)
+    ACCTXPACKETS = 138 #: Number of packets sent during connection: type(long)
+    ACCRXPACKETS = 139 #: Number of packets received during connection: type(long)
+    ASPAMSENDEREMAIL = 150 #: Sender email address: type(string)
+    ASPAMRECEIVEREMAIL = 151 #: Receiver email address: type(string)
+    ASPAMEMAILSUBJECT = 152 #: Email subject: type(string)
+    ASPAMEMAILSCORE = 153 #: Email score value: type(int)
+    ASPAMSENDERMTA = 154 #: Sender Message Transfer Agent IP address: type(ip)
+    ASPAMEMAILMESSAGEID = 155 #: Email message-ID: type(string)
+    ROUTENETWORK = 160 #: Network address of the network: type(ip)
+    ROUTENETMASK = 161 #: Netmask address of the network: type(int)
+    ROUTEDISTANCE = 162 #: Relative distance for route validation: type(int)
+    ROUTEMETRIC = 163 #: Protocol specific metric value: type(int)
+    ROUTEGATEWAY = 164 #: IP address of the gateway for the route: type(ip)
+    ROUTETYPE = 165 #: Type of route: type(int)
+    ROUTEOSPFLSATYPE = 166 #: Type of OSPF LSA's: type(int)
+    ROUTEBGPPATH = 167 #: Active BGP path: type(string)
+    POTENTIALLYDUPLICATERESPONSE = 170 #: Potentially duplicate correlation response: type(boolean)
+    BLACKLISTENTRYSOURCEIPPREFIXLEN = 172 #: Blacklist entry source IP address prefix length: type(int)
+    BLACKLISTENTRYDESTINATIONIPPREFIXLEN = 173 #: Blacklist entry destination IP address prefix length: type(int)
+    NODEVERSION = 301 #: Node version: type(string)
+    NODEDYNUP = 303 #: Update package level: type(string)
+    NODECONFIGURATION = 304 #: Current configuration: type(string)
+    ORIGINNAME = 400 #: Name of component producing event: type(string)
+    USERORIGINATOR = 401 #: Administrator causing event: type(string)
+    USERROLE = 402 #: Roles of Administrator causing event: type(string)
+    CLIENTIPADDRESS = 403 #: Address of client causing event: type(ip)
+    TYPEDESCRIPTION = 404 #: Description of the event: type(string)
+    RESULT = 405 #: Result state: type(int)
+    OBJECTID = 406 #: Special field for filtering Audit entries using the defined resources. Not present in the audit entries as such.: type(struct)
+    OBJECTNAME = 407 #: Elements being manipulated: type(string)
+    OBJECTDN = 410 #: User and Group Information: type(string)
+    INCIDENTCASE = 411 #: Incident Case: type(int)
+    SESSIONDOMAIN = 414 #: Administrative Domain of Login Session: type(long)
+    ELEMENTDOMAIN = 415 #: Administrative Domain of Associated Element: type(long)
+    ZIPEXPORTFILE = 420 #: Snapshot of element being manipulated: type(binary)
+    FW100INTERFACE = 431 #: FW100 Interface: type(long)
+    ENTERPRISEOID = 493 #: Enterprise OID: type(string)
+    GENERICTRAPTYPE = 494 #: Generic Trap Type: type(int)
+    VPNSRCID = 499 #: Source VPN: type(int)
+    ALERTSEVERITY = 602
+    HTTPREQUESTHOST = 1586
+    USERNAME = 3001
+    
+class Actions:
+    DISCARD = 0
+    ALLOW = 1
+    REFUSE = 2
+    DISCARD_PASSIVE = 4
+    TERMINATE_PASSIVE = 8
+    TERMINATE = 9
+    TERMINATE_FAILED = 10
+    PERMIT = 11
+    TERMINATE_RESET = 12
+    BLOCK = 13
+
+class Alerts:
+    INFO = 1
+    LOW = 3
+    HIGH = 5
+    CRITICAL = 10

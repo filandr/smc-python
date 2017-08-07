@@ -12,7 +12,7 @@ To load the configuration for system, do::
     '881'
     >>> for pkg in system.update_package():
     ...   print(pkg)
-    ... 
+    ...
     UpdatePackage(name=Update Package 889)
     UpdatePackage(name=Update Package 888)
     UpdatePackage(name=Update Package 887)
@@ -20,12 +20,12 @@ To load the configuration for system, do::
 """
 import smc.actions.search as search
 from smc.elements.other import prepare_blacklist
-from smc.base.model import prepared_request, SubElement
+from smc.base.model import SubElement
 from smc.administration.updates import EngineUpgrade, UpdatePackage
 from smc.administration.license import Licenses
-from smc.api.common import fetch_json_by_post
-from smc.api.exceptions import ActionCommandFailed
+from smc.api.exceptions import TaskRunFailed
 from smc.administration.tasks import DownloadTask
+from smc.base.util import millis_to_utc
 
 
 class System(SubElement):
@@ -34,7 +34,7 @@ class System(SubElement):
     and updating engines
     """
 
-    def __init__(self, **meta):
+    def __init__(self):
         entry = search.element_entry_point('system')
         super(System, self).__init__(href=entry)
         pass
@@ -44,21 +44,25 @@ class System(SubElement):
         """
         Return the SMC version
         """
-        return self._resource.get('smc_version').get('value')
+        return self.read_cmd(
+            resource='smc_version').get('value')
 
     @property
     def smc_time(self):
         """
-        Return the SMC time
+        Return the SMC time in ms
         """
-        return self._resource.get('smc_time').get('value')
+        return millis_to_utc(
+            int(self.read_cmd(
+                resource='smc_time').get('value')))
 
     @property
     def last_activated_package(self):
         """
         Return the last activated package by id
         """
-        return self._resource.get('last_activated_package').get('value')
+        return self.read_cmd(
+            resource='last_activated_package').get('value')
 
     def empty_trash_bin(self):
         """
@@ -67,18 +71,16 @@ class System(SubElement):
         :raises ActionCommandFailed: failed removing trash
         :return: None
         """
-        prepared_request(ActionCommandFailed,
-                         href=self._resource.empty_trash_bin
-                         ).delete()
+        self.del_cmd(resource='empty_trash_bin')
 
     def update_package(self):
         """
         Show all update packages on SMC
 
-        :return: list :py:class:`smc.administration.updates.UpdatePackage`
+        :rtype: list(UpdatePackage)
         """
         return [UpdatePackage(**update)
-                for update in self._resource.get('update_package')]
+                for update in self.read_cmd(resource='update_package')]
 
     def update_package_import(self):
         pass
@@ -98,7 +100,7 @@ class System(SubElement):
         :rtype: dict
         """
         return [EngineUpgrade(**upgrade)
-                for upgrade in self._resource.get('engine_upgrade')]
+                for upgrade in self.read_cmd(resource='engine_upgrade')]
 
     def uncommitted(self):
         pass
@@ -107,12 +109,12 @@ class System(SubElement):
         """
         List of all properties applied to the SMC
         """
-        return self._resource.get('system_properties')
+        return self.read_cmd(resource='system_properties')
 
     def clean_invalid_filters(self):
         pass
 
-    def blacklist(self, src, dst, duration=3600):
+    def blacklist(self, src, dst, duration=3600, **kw):
         """
         Add blacklist to all defined engines.
         Use the cidr netmask at the end of src and dst, such as:
@@ -122,16 +124,18 @@ class System(SubElement):
         :param dst: destination of blacklist entry
         :raises ActionCommandFailed: blacklist apply failed with reason
         :return: None
-        
+
         .. seealso:: :class:`smc.core.engine.Engine.blacklist`. Applying
             a blacklist at the system level will be a global blacklist entry
             versus an engine specific entry.
         
+        .. note:: If more advanced blacklist is required using source/destination
+            ports and protocols (udp/tcp), use kw to provide these arguments. See
+            :py:func:`smc.elements.other.prepare_blacklist` for more details.
         """
-        prepared_request(ActionCommandFailed,
-                         href=self._resource.blacklist,
-                         json=prepare_blacklist(src, dst, duration)
-                         ).create()
+        self.send_cmd(
+            resource='blacklist',
+            json=prepare_blacklist(src, dst, duration, **kw))
 
     @property
     def licenses(self):
@@ -141,22 +145,39 @@ class System(SubElement):
         granted date, expiration date, etc.
         ::
 
-            for license in system.licenses:
-                print(license, license.expiration_date)
-                .....
+            >>> for license in system.licenses:
+            ...    if license.bound_to.startswith('Management'):
+            ...        print(license.proof_of_license)
+            abcd-efgh-ijkl-mnop
 
-        :return: list :py:class:`smc.administration.license.Licenses`
+        :rtype: list(Licenses)
         """
-        return Licenses(self._resource.get('licenses'))
+        return Licenses(self.read_cmd(resource='licenses'))
 
-    def license_fetch(self):
+    def license_fetch(self, proof_of_serial):
         """
-        Fetch available licenses for this SMC
+        Request a license download for the specified POS (proof of serial).
+        
+        :param str proof_of_serial: proof of serial number of license to fetch
         """
-        return self._resource.get('license_fetch')
+        return self.read_cmd(
+            resource='license_fetch',
+            params={'proofofserial': proof_of_serial})
 
-    def license_install(self):
-        raise NotImplementedError
+    def license_install(self, license_file):
+        """
+        Install a new license.
+        
+        :param str license_file: fully qualified path to the
+            license jar file.
+        :raises: ActionCommandFailed
+        :return: None
+        """
+        self.upd_cmd(
+            resource='license_install',
+            files={
+                'license_file': open(license_file, 'rb')
+                })
 
     def license_details(self):
         """
@@ -165,13 +186,14 @@ class System(SubElement):
 
         :return: dictionary of key/values
         """
-        return self._resource.get('license_details')
+        return self.read_cmd(resource='license_details')
 
     def license_check_for_new(self):
         """
-        Check for new SMC license
+        Launch the check and download of licenses on the Management Server.
+        This task can be long so call returns immediately.
         """
-        return self._resource.get('license_check_for_new')
+        return self.read_cmd(resource='license_check_for_new')
 
     def delete_license(self):
         raise NotImplementedError
@@ -183,21 +205,21 @@ class System(SubElement):
         :return: list of dict items related to master engines and virtual
             engine mappings
         """
-        return self._resource.get('visible_virtual_engine_mapping')
+        return self.read_cmd(resource='visible_virtual_engine_mapping')
 
     def references_by_element(self, element_href):
         """
         Return all references to element specified.
 
         :param str element_href: element reference
-        :return: list list of references where element is used
+        :return: list of references where element is used
+        :rtype: list(dict)
         """
-        result = fetch_json_by_post(href=self._resource.references_by_element,
-                                    json={'value': element_href})
-        if result.json:
-            return result.json
-        else:
-            return []
+        result = self.send_cmd(
+            resource='references_by_element',
+            json={
+                'value': element_href})
+        return result
 
     def export_elements(self, filename='export_elements.zip', typeof='all'):
         """
@@ -211,37 +233,46 @@ class System(SubElement):
         :param type: type of element
         :param filename: Name of file for export
         :raises TaskRunFailed: failure during export with reason
-        :return: DownloadTask
+        :rtype: DownloadTask
         """
         valid_types = ['all', 'nw', 'ips', 'sv', 'rb', 'al', 'vpn']
         if typeof not in valid_types:
             typeof = 'all'
 
-        task = prepared_request(
-            href=self._resource.export_elements,
-            params={'recursive': True,
-                    'type': typeof}
-            ).create()
+        task = self.send_cmd(
+            TaskRunFailed,
+            resource='export_elements',
+            params={
+                'recursive': True,
+                'type': typeof})
 
         return DownloadTask(
-                filename=filename, **task.json)
-       
+                filename=filename, task=task)
+
     def active_alerts_ack_all(self):
         """
         Acknowledge all active alerts in the SMC
+    
         :raises ActionCommandFailed: Failure during acknowledge with reason
         :raises ResourceNotFound: resource supported in version >= 6.2
         :return: None
         """
-        prepared_request(ActionCommandFailed,
-                         href=self._resource.active_alerts_ack_all
-                         ).delete()
+        self.del_cmd(resource='active_alerts_ack_all')
 
-    def import_elements(self):
-        raise NotImplementedError
+    def import_elements(self, import_file):
+        """
+        Import elements into SMC. Specify the fully qualified path
+        to the import file.
+        
+        :param str import_file: system level path to file
+        :raises: ActionCommandFailed
+        :return: None
+        """
+        self.send_cmd(
+            resource='import_elements',
+            files={
+                'import_file': open(import_file, 'rb')
+                })
 
     def unlicensed_components(self):
-        raise NotImplementedError
-
-    def snapshot(self):
         raise NotImplementedError
